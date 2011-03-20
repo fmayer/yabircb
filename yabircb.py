@@ -51,20 +51,26 @@ class Handler(object):
         return NULLITER
 
 
-class StartsWithDispatch(Handler):
-    def __init__(self, startfun, children, fallback=None):
+class StartsWith(Handler):
+    def __init__(self, startfun, child):
         self.startfun = startfun
-        self.children = children
-        self.fallback = fallback
+        self.child = child
     
     def privmsg(self, user, channel, msg, bot):
         start = self.startfun(user=user, channel=channel, msg=msg, bot=bot)
         
         if msg.startswith(start):
-            msg = msg[len(start):]
+            return self.child.privmsg(user, channel,  msg[len(start):], bot)
         else:
             return NULLITER 
-        
+
+
+class Dispatch(Handler):
+    def __init__(self, children, fallback=None):
+        self.children = children
+        self.fallback = fallback
+    
+    def privmsg(self, user, channel, msg, bot):
         split = msg.split(None, 1)
         disp = split[0]
         if not disp:
@@ -81,9 +87,6 @@ class StartsWithDispatch(Handler):
                 return NULLITER
             else:
                 return self.fallback.privmsg(user, channel, rest, bot)
-    
-    def with_startfun(self, fun):
-        return StartsWithDispatch(fun, self.children, self.fallback)
 
 
 class Respond(Handler):
@@ -232,6 +235,8 @@ class RPN(Handler):
             result = str(result)
         except ValueError, e:
             result = 'Error: %s' % e.args[0]
+        except OverflowError:
+            result = 'Error: Overflow.'
         
         return [
             (MESSAGE,
@@ -384,8 +389,7 @@ if __name__ == '__main__':
     static = More(
         Static(u'Fine chariot, but where are ze horses?'), 20, ' [!more]'
     )
-    main = StartsWithDispatch(
-        lambda **kw: kw['bot'].nickname + ': ', 
+    main = Dispatch(
         {u'chariot': Respond(static),
          u'analyze': Respond(Static('A strange game. The only winning move is '
                             'not to play.')),
@@ -394,12 +398,13 @@ if __name__ == '__main__':
         Static(u'What do you want‽')
     )
     
-    tell = To(main.with_startfun(lambda **kw: ''))
+    tell = To(main)
     main.children['to'] = tell
     
     f = GeneralBotFactory(
         dict(zip(liter, liter)), sys.argv[1],
-        [main, main.with_startfun(lambda **kw: '!')]
+        [StartsWith(lambda **kw: '!', main),
+         StartsWith(lambda **kw: kw['bot'].nickname + ': ', main)]
     )
 
     # connect factory to this host and port
