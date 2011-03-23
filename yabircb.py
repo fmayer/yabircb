@@ -18,13 +18,8 @@
 
 from __future__ import with_statement
 
-import re
-import os
 import sys
-import math
 import cmath
-import random
-import itertools
 
 # twisted imports
 from twisted.words.protocols import irc
@@ -35,6 +30,12 @@ DEFAULTENC = 'utf-8'
 
 ACTION = 1
 MESSAGE = 2
+
+def maybe_int(num):
+    if not num % 1:
+        return int(num)
+    return num
+
 
 def find_prev(itr, idx, elem):
     for idx in xrange(idx, -1, -1):
@@ -229,14 +230,19 @@ class RPN(Handler):
         
         try:
             result = calc_rpn(expr, operators)
-            if isinstance(result, complex) and not result.imag:
-                result = result.real
+            if isinstance(result, complex):
+                if result.imag:
+                    result = result.real
+            else:
+                result = maybe_int(result)
             self.mem = result
             result = str(result)
         except ValueError, e:
             result = 'Error: %s' % e.args[0]
         except OverflowError:
             result = 'Error: Overflow.'
+        except ZeroDivisionError:
+            result = 'Error: division by zero.'
         
         return [
             (MESSAGE,
