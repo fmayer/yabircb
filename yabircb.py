@@ -208,6 +208,7 @@ class RPN(Handler):
             u'j': 1j,
             u'True': True,
             u'False': False,
+            u'∞': float('inf'),
         }
             
         expr = []
