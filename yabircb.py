@@ -232,7 +232,7 @@ class RPN(Handler):
         try:
             result = calc_rpn(expr, operators)
             if isinstance(result, complex):
-                if result.imag:
+                if not result.imag:
                     result = result.real
             else:
                 result = maybe_int(result)
