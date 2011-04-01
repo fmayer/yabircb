@@ -25,6 +25,11 @@ import cmath
 from twisted.words.protocols import irc
 from twisted.internet import reactor, protocol
 
+try:
+    import sympy
+except ImportError:
+    sympy = None
+
 NULLITER = iter([])
 DEFAULTENC = 'utf-8'
 
@@ -32,7 +37,10 @@ ACTION = 1
 MESSAGE = 2
 
 def maybe_int(num):
-    if not num % 1:
+    if isinstance(num, list):
+        return '; '.join(str(x) for x in num)
+        
+    if isinstance(num, float) and not num % 1:
         return int(num)
     return num
 
@@ -124,6 +132,10 @@ class To(Handler):
         return self.child.privmsg(name, channel, rest, bot)
 
 
+def solve_sympy(x, y):
+    return sympy.solve(x, y)
+
+
 def calc_rpn(expr, operators):
     stack = []
     
@@ -157,15 +169,7 @@ class RPN(Handler):
             u'-': (2, lambda x, y: x - y),
             u'*': (2, lambda x, y: x * y),
             u'/': (2, lambda x, y: x / y),
-            u'sqrt': (1, cmath.sqrt),
-            u'√': (1, cmath.sqrt),
             u'pow': (2, lambda x, y: x ** y),
-            u'sin': (1, cmath.sin),
-            u'cos': (1, cmath.cos),
-            u'tan': (1, cmath.tan),
-            u'asin': (1, cmath.asin),
-            u'acos': (1, cmath.acos),
-            u'atan': (1, cmath.atan),
             
             u'deg': (1, lambda x: 180. * x / cmath.pi),
             u'rad': (1, lambda x: cmath.pi * x / 180),
@@ -198,7 +202,19 @@ class RPN(Handler):
             u'tomile': (1, lambda x: x / 1609.344),
             u'todoppelmaß': (1, lambda x: x / 2),
             u'toseidl': (1, lambda x: x / 0.354),
+            # The lambda is needed to prevent an error if sympy
+            # is unavailable.
+            u'solve': (2, solve_sympy)
         }
+        
+        for elem in [
+            u'asin', u'cos', u'atan',
+            u'tan', u'sin', u'sqrt', u'acos']:
+            if sympy is not None:
+                operators[elem] = (1, getattr(sympy, elem))
+            else:
+                operators[elem] = (1, getattr(cmath, elem))
+        operators[u'√'] = operators['sqrt']
         
         constants = {
             u'pi': cmath.pi,
@@ -213,13 +229,23 @@ class RPN(Handler):
             
         expr = []
         for elem in msg.replace('(', '').replace(')', '').split():
-            if elem in operators:
+            if elem.startswith("'"):
+                if not sympy:
+                    return [
+                        (MESSAGE,
+                         'Error: sympy unavailable. Cannot do symbolic math.',
+                         result,
+                         irc.MAX_COMMAND_LENGTH)
+                    ]
+                else:
+                    expr.append(sympy.Symbol(elem[1:]))
+            elif elem in operators:
                 expr.append(elem)
             elif elem in constants:
                 expr.append(constants[elem])
             else:
                 try:
-                    expr.append(float(elem))
+                    expr.append(maybe_int(float(elem)))
                 except ValueError:
                     return [
                         (MESSAGE,
