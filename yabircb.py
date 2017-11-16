@@ -53,7 +53,7 @@ def find_prev(itr, idx, elem):
 
 
 class Handler(object):
-    def privmsg(self, user, channel, msg):
+    def privmsg(self, user, channel, msg, bot):
         return NULLITER
    
     def action(self, user, channel, msg):
